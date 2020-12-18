@@ -16,14 +16,17 @@ from pdfminer.pdfdocument import PDFDocument
 
 def pypdf2txt(path, pages=None):
     txt = ""
+    page_by_page = []
     pdf = PdfFileReader(str(path))
-    for page in pdf.pages:
-        txt += page.extractText()
+    for page_num, page in enumerate(pdf.pages):
+        pagetxt = page.extractText()
+        txt += pagetxt
+        page_by_page.append({"page": page_num, "text": pagetxt})
         if pages != None:
             pages -= 1
         if pages == 0:
             break
-    return txt
+    return txt, page_by_page
 
 
 def pdfminer_to_text(path, pages=None):
@@ -87,42 +90,37 @@ class PdfMinerWrapper(object):
         self.fp.close()
 
 
-def get_text_object_details(page):
+def get_text_object_details(page, fonts):
     data = {
         "page": page.pageid,
+        "characters": {"size": [], "chars": [], "fontfamily": []},
         "tboxes": [],
     }
     for tbox in page:
         if not isinstance(tbox, LTTextBox):
             continue
-        data["tboxes"].append(
-            {
-                "text": tbox.get_text(),
-                "font_size": list(
-                    set(
-                        round(c.size, 2)
-                        for obj in tbox
-                        for c in obj
-                        if isinstance(c, LTChar)
-                    )
-                ),
-                "font_familyface": list(
-                    set(
-                        c.fontname for obj in tbox for c in obj if isinstance(c, LTChar)
-                    )
-                ),
-            },
-        )
-
-    return data
+        for obj in tbox:
+            data["tboxes"].append(tbox.get_text())
+            for c in obj:
+                if isinstance(c, LTChar):
+                    data["characters"]["size"].append(round(c.size, 2))
+                    data["characters"]["chars"].append(c.get_text())
+                    if c.fontname not in fonts:
+                        fonts[c.fontname] = (
+                            max(fonts.values()) + 1 if len(fonts) > 0 else 0
+                        )
+                    data["characters"]["fontfamily"].append(fonts[c.fontname])
+    return data, fonts
 
 
 def get_all_data(path, pages=None):
     pdfminer_detailed = []
     try:
         with PdfMinerWrapper(path) as doc:
+            fonts = defaultdict(int)
             for page in doc:
-                pdfminer_detailed.append(get_text_object_details(page))
+                page_data, fonts = get_text_object_details(page, fonts)
+                pdfminer_detailed.append(page_data)
                 if pages != None:
                     pages -= 1
                 if pages == 0:
@@ -136,9 +134,10 @@ def get_all_data(path, pages=None):
         pdfminer_results = f"error: {e}"
 
     try:
-        pypdf2_results = pypdf2txt(path, pages=pages)
+        pypdf2_whole_doc_txt, pypdf2_page_by_page_txt = pypdf2txt(path, pages=pages)
     except Exception as e:
-        pypdf2_results = f"error: {e}"
+        pypdf2_whole_doc_txt = f"error: {e}"
+        pypdf2_page_by_page_txt = [{"error": f"{e}"}]
 
     return {
         "filepath": path,
@@ -146,5 +145,7 @@ def get_all_data(path, pages=None):
         "college": path.split("/")[1],
         "pdfminer": pdfminer_results,
         "pdfminer_detailed": pdfminer_detailed,
-        "pypdf2": pypdf2_results,
+        "fonts": fonts,
+        "pypdf2": pypdf2_whole_doc_txt,
+        "pypdf2_detailed": pypdf2_page_by_page_txt,
     }

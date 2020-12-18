@@ -2,3 +2,7 @@
 *.zip
 .ipynb_checkpoints/
 pdf_rust
+*.pyc
+*.docx
+*.csv
+*.yaml

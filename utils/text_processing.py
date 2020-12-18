@@ -27,3 +27,21 @@ def get_departments(path, pages=27, department_font_size=17):
     department_courses[department_name] += obj.get_text()
 
     return department_courses
+
+
+def get_char_list():
+    return
+
+
+def get_text_from_position(
+    data, page_id, index_from, index_to=None, how_long=None, chars=False
+):
+    for page in data:
+        if page["page"] == page_id:
+            if index_to:
+                till = index_to
+            if how_long:
+                till = how_long + index_from
+            if chars:
+                print(page["characters"]["size"][index_from:till])
+            return "".join(page["characters"]["chars"])[index_from:till]
