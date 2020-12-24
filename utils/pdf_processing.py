@@ -89,27 +89,35 @@ class PdfMinerWrapper(object):
     def __exit__(self, _type, value, traceback):
         self.fp.close()
 
-
+def sanitize_fontname(fontname):
+    return fontname.split('+')[-1]
+        
+        
 def get_text_object_details(page, fonts):
-    data = {
-        "page": page.pageid,
-        "characters": {"size": [], "chars": [], "fontfamily": []},
-        "tboxes": [],
-    }
+    data = dict(
+        page=page.pageid,
+        characters=dict(size=list(), chars=list(), fontfamily=list()),
+        tboxes=list(),
+    )
     for tbox in page:
         if not isinstance(tbox, LTTextBox):
             continue
+        data["tboxes"].append(tbox.get_text())
         for obj in tbox:
-            data["tboxes"].append(tbox.get_text())
             for c in obj:
                 if isinstance(c, LTChar):
-                    data["characters"]["size"].append(round(c.size, 2))
+                    data["characters"]["size"].append(round(c.size,2))
                     data["characters"]["chars"].append(c.get_text())
-                    if c.fontname not in fonts:
-                        fonts[c.fontname] = (
+                    fontname = sanitize_fontname(c.fontname)
+                    if fontname not in fonts:
+                        fonts[fontname] = (
                             max(fonts.values()) + 1 if len(fonts) > 0 else 0
                         )
-                    data["characters"]["fontfamily"].append(fonts[c.fontname])
+                    data["characters"]["fontfamily"].append(fonts[fontname])
+        data["characters"]["chars"].append('\n')
+        data["characters"]["size"].append(-1)
+        data["characters"]["fontfamily"].append(-1)
+
     return data, fonts
 
 
@@ -127,6 +135,7 @@ def get_all_data(path, pages=None):
                     break
     except Exception as e:
         pdfminer_detailed = [{"error": f"{e}"}]
+        fonts = {"error": f"{e}"}
 
     try:
         pdfminer_results = pdfminer_to_text(path, pages=pages)
